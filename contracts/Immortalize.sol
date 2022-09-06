@@ -10,7 +10,7 @@ interface IToken {
 
 contract TweetImmortalizer {
     struct Tweet {
-        bytes15 handle; // [a-zA-Z0-9_]{1,15}
+        bytes32 handle; // [a-zA-Z0-9_]{1,15}
         bytes message; // .{2,280}
         uint256 timestamp;
     }
@@ -20,7 +20,7 @@ contract TweetImmortalizer {
     // tweet_id => Tweet
     mapping (uint256 => Tweet) public tweets;
     // handle => donation amount (in eth)
-    mapping (bytes15 => uint256) public donations;
+    mapping (bytes32 => uint256) public donations;
 
     uint256 immutable MIN_HANDLE_LENGTH = 1;
     uint256 immutable MAX_HANDLE_LENGTH = 15;
@@ -33,7 +33,7 @@ contract TweetImmortalizer {
     uint256 immutable FIXED_STARTUP_GAS = 45000000000000;
     // 45000000000000 gives profit: $0.009114844284321792 with 0.1 gwei gas price unoptimized or $0.01055208574550016 optimized 200 runs (slightly better!) or 0.010590271825772544 optimized 2000 runs
 
-    event TweetImmortalized(bytes15 indexed handle, uint256 tweet_id/*, address indexed executor*/);
+    event TweetImmortalized(bytes32 indexed handle, uint256 tweet_id/*, address indexed executor*/);
     event ExecutorSet(address indexed entity, bool approved);
 
     constructor() payable {
@@ -51,7 +51,7 @@ contract TweetImmortalizer {
         _;
     }
 
-    //* TODO: check if needed
+    // necessary to accept ether
     receive () external payable {
     }
 
@@ -84,14 +84,15 @@ contract TweetImmortalizer {
         require(message.length - MIN_TWEET_LENGTH <= MAX_TWEET_LENGTH - MIN_TWEET_LENGTH, "message too long");
         
         uint256 i = 0;
-        bytes15 handle_bytes = 0x0;
+        bytes32 handle_bytes = 0x0;
         while (i < handle.length) {
             if (!_is_valid_handle_character(uint8(handle[i])))
                 break;
 
-            handle_bytes |= (handle[i] << ((14 - i) * 8));
+            handle_bytes |= (bytes32(handle[i]) >> ((14 - i) * 8));
             i++;
         }
+        //console.logBytes32(handle_bytes);
 
         require(i == handle.length, "invalid handle");
         require(tweets[tweet_id].handle == 0, "tweet already immortalized");
@@ -103,13 +104,13 @@ contract TweetImmortalizer {
         if (address(this).balance >= fee)
             payable(msg.sender).transfer(fee);
         else
-            fee = 0;
+            fee = address(this).balance;
 
         return fee;
     }
 
     function donate(uint256 tweet_id) public payable {
-        bytes15 handle = tweets[tweet_id].handle;
+        bytes32 handle = tweets[tweet_id].handle;
         // tweet_id zero means no specific reference to the donation (handle zero)
         require(tweet_id == 0 || handle != 0, "no such tweet");
         donations[handle] += msg.value;
